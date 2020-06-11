@@ -10,10 +10,14 @@ import com.haulmont.cuba.core.global.LoadContext;
 import com.haulmont.cuba.gui.Notifications;
 import com.haulmont.cuba.gui.ScreenBuilders;
 import com.haulmont.cuba.gui.UiComponents;
+import com.haulmont.cuba.gui.backgroundwork.BackgroundWorkWindow;
 import com.haulmont.cuba.gui.components.*;
+import com.haulmont.cuba.gui.executors.BackgroundTask;
+import com.haulmont.cuba.gui.executors.TaskLifeCycle;
+import com.haulmont.cuba.gui.model.CollectionContainer;
 import com.haulmont.cuba.gui.model.CollectionLoader;
-import com.haulmont.cuba.gui.screen.*;
 import com.haulmont.cuba.gui.screen.LookupComponent;
+import com.haulmont.cuba.gui.screen.*;
 import org.slf4j.Logger;
 
 import javax.inject.Inject;
@@ -42,43 +46,33 @@ public class ContributorBrowse extends StandardLookup<Contributor> {
     @Inject
     private CollectionLoader<Contributor> contributorsDl;
     @Inject
-    private CollectionLoader<Repository> reposDl;
-    @Inject
     private UiComponents uiComponents;
     @Inject
     private ScreenBuilders screenBuilders;
     @Inject
     private DataManager dataManager;
+    @Inject
+    private CollectionContainer<Repository> reposDc;
 
-    /**
-     * Loads a list of {@link Repository} entity for the {@code reposDc} data container.
-     * The result is desc sorted by the count of repository stars.
-     *
-     * @param loadContext parameter is not used in the implementation
-     * @return Returns a list of {@link Repository} for a GitHub owner, provided by {@code repoOwnerField}
-     */
-    @Install(to = "reposDl", target = Target.DATA_LOADER)
-    private List<Repository> reposDlLoadDelegate(LoadContext<Repository> loadContext) {
-        repoNameField.setValue(null);
-        if (repoOwnerField.getValue() == null)
-            return new ArrayList<>();
-        try {
+    private class RepositoryLoadTask extends BackgroundTask<Integer, List<Repository>> {
+
+        protected RepositoryLoadTask() {
+            super(10000, ContributorBrowse.this);
+        }
+
+        @Override
+        public List<Repository> run(TaskLifeCycle<Integer> taskLifeCycle) throws Exception {
             List<Repository> repos = githubInfoService.getRepos(repoOwnerField.getValue());
             repos.sort((o1, o2) -> o2.getStargazersCount().compareTo(o1.getStargazersCount()));
             return repos;
-        } catch (Exception e) {
-            handleExceptionWithNotification(e);
-            return new ArrayList<>();
         }
-    }
 
-    /**
-     * Sets the most starred {@link Repository} into {@code repoNameField} drop-down list
-     */
-    @Subscribe(id = "reposDl", target = Target.DATA_LOADER)
-    public void onReposDlPostLoad(CollectionLoader.PostLoadEvent<Repository> event) {
-        if (event.getLoadedEntities().size() > 0)
-            repoNameField.setValue(event.getLoadedEntities().get(0));
+        @Override
+        public void done(List<Repository> result) {
+            reposDc.setItems(result);
+            if (result.size() > 0)
+                repoNameField.setValue(result.get(0));
+        }
     }
 
     /**
@@ -107,7 +101,8 @@ public class ContributorBrowse extends StandardLookup<Contributor> {
      */
     @Subscribe("repoOwnerField")
     public void onRepoOwnerFieldValueChange(HasValue.ValueChangeEvent<String> event) {
-        reposDl.load();
+        RepositoryLoadTask repositoryLoadTask = new RepositoryLoadTask();
+        BackgroundWorkWindow.show(repositoryLoadTask, true);
     }
 
     /**

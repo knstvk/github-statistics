@@ -9,9 +9,7 @@
             <view extends="_local"/>
             <loader id="contributorsDl" maxResults="50"/>
         </collection>
-        <collection id="reposDc" class="com.company.ghstat.entity.Repository" view="_local">
-            <loader id="reposDl"/>
-        </collection>
+        <collection id="reposDc" class="com.company.ghstat.entity.Repository" view="_local"/>
     </data>
     <dialogMode height="600"
                 width="800"/>
