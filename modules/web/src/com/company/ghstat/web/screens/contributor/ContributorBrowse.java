@@ -5,13 +5,17 @@ import com.company.ghstat.entity.Repository;
 import com.company.ghstat.entity.UserInfo;
 import com.company.ghstat.service.GithubInfoService;
 import com.company.ghstat.web.screens.userinfo.UserInfoView;
+import com.haulmont.cuba.core.entity.KeyValueEntity;
+import com.haulmont.cuba.core.global.DataLoadContext;
 import com.haulmont.cuba.core.global.DataManager;
 import com.haulmont.cuba.core.global.LoadContext;
+import com.haulmont.cuba.core.global.ValueLoadContext;
 import com.haulmont.cuba.gui.Notifications;
 import com.haulmont.cuba.gui.ScreenBuilders;
 import com.haulmont.cuba.gui.UiComponents;
 import com.haulmont.cuba.gui.components.*;
 import com.haulmont.cuba.gui.model.CollectionLoader;
+import com.haulmont.cuba.gui.model.KeyValueCollectionLoader;
 import com.haulmont.cuba.gui.screen.*;
 import com.haulmont.cuba.gui.screen.LookupComponent;
 import org.slf4j.Logger;
@@ -19,6 +23,7 @@ import org.slf4j.Logger;
 import javax.inject.Inject;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 /**
@@ -40,7 +45,7 @@ public class ContributorBrowse extends StandardLookup<Contributor> {
     @Inject
     private LookupField<Repository> repoNameField;
     @Inject
-    private CollectionLoader<Contributor> contributorsDl;
+    private KeyValueCollectionLoader contributorsDl;
     @Inject
     private CollectionLoader<Repository> reposDl;
     @Inject
@@ -86,20 +91,37 @@ public class ContributorBrowse extends StandardLookup<Contributor> {
      * The result is desc sorted by the count of contributions.
      * Supports pagination.
      *
-     * @param loadContext parameter is not used in the implementation
+     * @param valueLoadContext parameter is not used in the implementation
      * @return Returns a list of {@link Contributor} for a GitHub repository, provided by {@code repoNameField}
      */
     @Install(to = "contributorsDl", target = Target.DATA_LOADER)
-    private List<Contributor> contributorsDlLoadDelegate(LoadContext<Contributor> loadContext) {
+    private List<KeyValueEntity> contributorsDlLoadDelegate(ValueLoadContext valueLoadContext) {
         if (repoNameField.getValue() == null)
             return new ArrayList<>();
         try {
             int page = contributorsDl.getFirstResult() / contributorsDl.getMaxResults() + 1;
-            return githubInfoService.getContributors(repoNameField.getValue(), page, contributorsDl.getMaxResults());
+            List<Contributor> contributors = githubInfoService.getContributors(repoNameField.getValue(), page, contributorsDl.getMaxResults());
+            return contributors.stream()
+                    .map(contributor -> {
+                        KeyValueEntity keyValueEntity = new KeyValueEntity();
+                        keyValueEntity.setValue("login", contributor.getLogin());
+                        keyValueEntity.setValue("contributions", contributor.getContributions());
+                        return keyValueEntity;
+                    })
+                    .collect(Collectors.toList());
         } catch (Exception e) {
             handleExceptionWithNotification(e);
             return new ArrayList<>();
         }
+    }
+
+    /**
+     * Returns a total number of rows which is shown when the user clicks the "?" link in the paging control.
+     */
+    @Install(to = "contributorsTable", subject = "rowsCountTotalCountDelegate")
+    private Long contributorsTableRowsCountTotalCountDelegate(DataLoadContext dataLoadContext) {
+        // get the total count from an external service
+        return 0L;
     }
 
     /**
@@ -123,15 +145,15 @@ public class ContributorBrowse extends StandardLookup<Contributor> {
      * It opens {@code UserInfoView} screen, providing {@link UserInfo} entity as an editing entity.
      */
     @Install(to = "contributorsTable.login", subject = "columnGenerator")
-    private Component contributorsTableLoginColumnGenerator(Contributor contributor) {
+    private Component contributorsTableLoginColumnGenerator(KeyValueEntity contributor) {
         LinkButton linkButton = uiComponents.create(LinkButton.class);
-        linkButton.setCaption(contributor.getLogin());
+        linkButton.setCaption(contributor.getValue("login"));
         linkButton.addClickListener(event -> {
             UserInfoView userInfoScreen = screenBuilders.screen(this)
                     .withScreenClass(UserInfoView.class)
                     .withOpenMode(OpenMode.DIALOG)
                     .build();
-            userInfoScreen.setUserLoginToShow(contributor.getLogin());
+            userInfoScreen.setUserLoginToShow(contributor.getValue("login"));
             userInfoScreen.show();
         });
         return linkButton;

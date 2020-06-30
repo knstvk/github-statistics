@@ -4,11 +4,13 @@
         focusComponent="contributorsTable"
         messagesPack="com.company.ghstat.web.screens.contributor">
     <data readOnly="true">
-        <collection id="contributorsDc"
-                    class="com.company.ghstat.entity.Contributor">
-            <view extends="_local"/>
+        <keyValueCollection id="contributorsDc">
+            <properties>
+                <property name="login" datatype="string"/>
+                <property name="contributions" datatype="long"/>
+            </properties>
             <loader id="contributorsDl" maxResults="50"/>
-        </collection>
+        </keyValueCollection>
         <collection id="reposDc" class="com.company.ghstat.entity.Repository" view="_local">
             <loader id="reposDl"/>
         </collection>
